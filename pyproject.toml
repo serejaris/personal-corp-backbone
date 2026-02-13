@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "personal-corp-backbone"
+version = "0.1.0"
+description = "Operational backbone CLI for plan/task/test-gated execution"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Sereja RIS" }
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0"
+]
+
+[project.scripts]
+backbone = "backbone.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+markers = [
+  "unit: fast deterministic unit tests",
+  "integration: tests spanning file + CLI integration",
+  "smoke: minimal smoke checks"
+]
