@@ -29,6 +29,7 @@ backbone task start T001
 backbone task verify T001
 backbone task done T001
 backbone run --profile lesson_analysis --source tests/fixtures/lesson_transcript.txt
+backbone render lesson-brief --artifact artifacts/<artifact>.json --output /tmp/analysis.md
 ```
 
 ## Artifact contract
@@ -39,3 +40,13 @@ backbone run --profile lesson_analysis --source tests/fixtures/lesson_transcript
 - `quality`: source/chunk/dedupe counters
 - `timings_ms`: per-stage deterministic runtime measurements
 - `result`: profile payload (`lesson_analysis` is validated against strict cohorts-compatible schema)
+
+## Lesson Brief Rendering
+
+Convert a `lesson_analysis` artifact to reusable `analysis.md` for downstream HTML lesson skills:
+
+```bash
+OUT=$(backbone run --profile lesson_analysis --source /tmp/transcript.txt)
+ART=$(echo "$OUT" | jq -r '.artifact_path')
+backbone render lesson-brief --artifact "$ART" --output /tmp/analysis.md
+```

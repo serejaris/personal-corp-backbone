@@ -5,6 +5,7 @@ import json
 import sys
 
 from .pipeline import PipelineError, run
+from .render import render_lesson_brief
 from .tasks import TaskError, done_task, load_tasks, start_task, verify_task
 
 
@@ -44,6 +45,12 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_render_lesson_brief(args: argparse.Namespace) -> int:
+    output = render_lesson_brief(artifact_path=args.artifact, output_path=args.output)
+    print(json.dumps({"output_path": str(output)}, ensure_ascii=False))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="backbone")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -70,6 +77,14 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--profile", required=True)
     r.add_argument("--source", required=True)
     r.set_defaults(func=cmd_run)
+
+    render = sub.add_parser("render")
+    render_sub = render.add_subparsers(dest="render_cmd", required=True)
+
+    lesson_brief = render_sub.add_parser("lesson-brief")
+    lesson_brief.add_argument("--artifact", required=True)
+    lesson_brief.add_argument("--output", required=True)
+    lesson_brief.set_defaults(func=cmd_render_lesson_brief)
 
     return p
 
