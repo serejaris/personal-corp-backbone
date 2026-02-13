@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import Sequence
 
 import pytest
 
@@ -26,14 +27,17 @@ def test_render_lesson_brief_creates_markdown(tmp_path: Path) -> None:
 
 
 @pytest.mark.integration
-def test_cli_render_lesson_brief_success(tmp_path: Path) -> None:
+def test_cli_render_lesson_brief_success(
+    tmp_path: Path, cli_cmd: Sequence[str], cli_env: dict[str, str]
+) -> None:
     rr = run(profile="lesson_analysis", source="tests/fixtures/lesson_transcript.txt")
     out = tmp_path / "lesson_analysis.md"
 
     proc = subprocess.run(
-        ["backbone", "render", "lesson-brief", "--artifact", rr.artifact_path, "--output", str(out)],
+        [*cli_cmd, "render", "lesson-brief", "--artifact", rr.artifact_path, "--output", str(out)],
         capture_output=True,
         text=True,
+        env=cli_env,
     )
 
     assert proc.returncode == 0

@@ -54,6 +54,8 @@ def test_run_valid_fixture() -> None:
     payload = json.loads(p.read_text(encoding="utf-8"))
     assert payload["status"] == "success"
     assert payload["profile"] == "lesson_analysis"
+    assert payload["analysis_provider"] == "claude_code"
+    assert payload["analysis_model"] == "test-opus"
     assert set(payload["result"].keys()) == LESSON_RESULT_KEYS
     assert payload["result"]["summary"]
     assert payload["result"]["theory_practice_balance"]["theory_percent"] >= 0
@@ -80,4 +82,6 @@ def test_run_digest_profile_smoke() -> None:
     payload = json.loads(Path(result.artifact_path).read_text(encoding="utf-8"))
     assert "topics" in payload["result"]
     assert "summary" in payload["result"]
+    assert payload["analysis_provider"] == "deterministic"
+    assert payload["analysis_model"] == "n/a"
     assert "quality" in payload

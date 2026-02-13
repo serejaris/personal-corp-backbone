@@ -9,7 +9,7 @@ Canonical agent instructions for this repository.
 
 ## Repository goal
 
-Terminal-first analysis backbone with strict task gating and deterministic validation.
+Terminal-first analysis backbone with strict task gating and LLM-first transcript analysis.
 
 ## Core workflow
 
@@ -23,6 +23,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
 ```
+
+`lesson_analysis` requires Claude CLI (or compatible command via `BACKBONE_CLAUDE_CMD`).
 
 ## Mandatory commands
 
@@ -47,6 +49,7 @@ pip install -e '.[dev]'
 
 Each run must produce `artifacts/<uuid>.json` with:
 - top-level: `profile`, `status`, ids, `created_at`
+- top-level: `analysis_provider`, `analysis_model`
 - top-level: `quality`
 - top-level: `timings_ms`
 - `result` with strict `lesson_analysis` contract

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import shlex
+import subprocess
 import time
 import uuid
 from dataclasses import dataclass
@@ -30,7 +33,77 @@ LESSON_REQUIRED_FIELDS = {
 
 _TOKEN_RE = re.compile(r"[A-Za-zА-Яа-яЁё0-9-]+")
 _SENTENCE_RE = re.compile(r"[.!?]\s+|\n+")
-_QUESTION_RE = re.compile(r"([^?]+\?)")
+CLAUDE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": sorted(LESSON_REQUIRED_FIELDS),
+    "properties": {
+        "summary": {"type": "string"},
+        "detailed_summary": {"type": ["string", "null"]},
+        "questions_asked": {"type": "array", "items": {"type": "string"}},
+        "concepts_explained": {"type": "array", "items": {"type": "string"}},
+        "practical_activities": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["activity", "duration_estimate", "participation"],
+                "properties": {
+                    "activity": {"type": "string"},
+                    "duration_estimate": {"type": ["string", "null"]},
+                    "participation": {"type": ["string", "null"]},
+                },
+            },
+        },
+        "theory_practice_balance": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["theory_percent", "practice_percent", "assessment"],
+            "properties": {
+                "theory_percent": {"type": "integer"},
+                "practice_percent": {"type": "integer"},
+                "assessment": {"type": ["string", "null"]},
+            },
+        },
+        "interactivity": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["questions_to_students", "polls_or_checks", "breakouts_or_pair_work"],
+            "properties": {
+                "questions_to_students": {"type": "integer"},
+                "polls_or_checks": {"type": "array", "items": {"type": "string"}},
+                "breakouts_or_pair_work": {"type": "boolean"},
+            },
+        },
+        "learning_outcomes_stated": {"type": "boolean"},
+        "lesson_structure": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["has_opening", "has_closing", "transitions_clear"],
+            "properties": {
+                "has_opening": {"type": "boolean"},
+                "has_closing": {"type": "boolean"},
+                "transitions_clear": {"type": "boolean"},
+            },
+        },
+        "improvement_suggestions": {"type": "array", "items": {"type": "string"}},
+        "homework": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["task", "description", "deadline"],
+                "properties": {
+                    "task": {"type": "string"},
+                    "description": {"type": ["string", "null"]},
+                    "deadline": {"type": ["string", "null"]},
+                },
+            },
+        },
+        "preparation_for_next": {"type": "array", "items": {"type": "string"}},
+        "next_lesson_focus": {"type": ["string", "null"]},
+    },
+}
 
 
 class PipelineError(RuntimeError):
@@ -128,193 +201,6 @@ def _extract_topics(text: str) -> list[str]:
     return topics
 
 
-def _build_questions(text: str, topics: list[str]) -> list[str]:
-    explicit = [m.strip() for m in _QUESTION_RE.findall(text.replace("\n", " ")) if m.strip()]
-    if explicit:
-        return explicit[:5]
-
-    questions: list[str] = []
-    if topics:
-        questions.append(f"Как применить {topics[0].lower()} в текущем проекте?")
-    if len(topics) > 1:
-        questions.append(f"Какие риски при внедрении {topics[1].lower()}?")
-    if not questions:
-        questions.append("Какие шаги нужны для улучшения следующего занятия?")
-    return questions
-
-
-def _build_practical_activities(text: str) -> list[dict[str, str | None]]:
-    lower = text.lower()
-    activities: list[dict[str, str | None]] = []
-    if "чанк" in lower:
-        activities.append(
-            {
-                "activity": "Практика по разбиению транскрипта на чанки",
-                "duration_estimate": "20m",
-                "participation": "все",
-            }
-        )
-    if "ключев" in lower and "тем" in lower:
-        activities.append(
-            {
-                "activity": "Выделение ключевых тем для дайджеста",
-                "duration_estimate": "15m",
-                "participation": "все",
-            }
-        )
-    if "github" in lower and "issue" in lower:
-        activities.append(
-            {
-                "activity": "Фиксация задач в GitHub Issues",
-                "duration_estimate": "10m",
-                "participation": "часть",
-            }
-        )
-    if not activities:
-        activities.append(
-            {
-                "activity": "Разбор кейса урока и декомпозиция задач",
-                "duration_estimate": "15m",
-                "participation": "все",
-            }
-        )
-    return activities
-
-
-def _build_theory_practice_balance(text: str) -> dict[str, int | str]:
-    lower = text.lower()
-    theory_signals = sum(lower.count(w) for w in ("обсудили", "разобрали", "архитектур", "подход"))
-    practice_signals = sum(lower.count(w) for w in ("сделали", "практик", "разбиени", "выделили", "постро"))
-    total = theory_signals + practice_signals
-
-    if total == 0:
-        theory = 60
-    else:
-        theory = round((theory_signals / total) * 100)
-
-    theory = max(20, min(80, theory))
-    practice = 100 - theory
-
-    if abs(theory - practice) <= 20:
-        assessment = "хорошо"
-    elif theory > practice:
-        assessment = "много теории"
-    else:
-        assessment = "много практики"
-
-    return {
-        "theory_percent": theory,
-        "practice_percent": practice,
-        "assessment": assessment,
-    }
-
-
-def _build_interactivity(text: str) -> dict[str, Any]:
-    lower = text.lower()
-    questions_to_students = text.count("?") + lower.count("обсудили")
-    polls_or_checks: list[str] = []
-    if "ключев" in lower and "тем" in lower:
-        polls_or_checks.append("Проверка понимания по ключевым темам")
-    if "тест" in lower:
-        polls_or_checks.append("Мини-чек по тест-гейтам")
-    breakouts = any(k in lower for k in ("в парах", "в групп", "breakout"))
-
-    return {
-        "questions_to_students": questions_to_students,
-        "polls_or_checks": polls_or_checks,
-        "breakouts_or_pair_work": breakouts,
-    }
-
-
-def _build_lesson_structure(text: str) -> dict[str, bool]:
-    lower = text.lower()
-    return {
-        "has_opening": lower.startswith("сегодня"),
-        "has_closing": any(w in lower for w in ("потом", "в конце", "итог", "следующ")),
-        "transitions_clear": any(w in lower for w in ("потом", "затем", "далее")),
-    }
-
-
-def _build_improvement_suggestions(
-    balance: dict[str, int | str], interactivity: dict[str, Any], breakouts: bool
-) -> list[str]:
-    suggestions: list[str] = []
-    if int(balance["practice_percent"]) < 45:
-        suggestions.append("Добавить больше практики в середину занятия")
-    if interactivity["questions_to_students"] < 2:
-        suggestions.append("Добавить контрольные вопросы после каждого смыслового блока")
-    if not breakouts:
-        suggestions.append("Вставить работу в парах на 10 минут для закрепления")
-    if not suggestions:
-        suggestions.append("Сохранить текущий темп, добавить финальную рефлексию")
-    return suggestions
-
-
-def _build_homework(text: str, topics: list[str]) -> list[dict[str, str | None]]:
-    lower = text.lower()
-    items: list[dict[str, str | None]] = []
-    if "github" in lower and "issue" in lower:
-        items.append(
-            {
-                "task": "Описать задачи в GitHub Issues",
-                "description": "Сформулировать 3 issues для следующего шага пайплайна",
-                "deadline": None,
-            }
-        )
-    if "пайплайн" in lower:
-        items.append(
-            {
-                "task": "Собрать минимальный пайплайн с тест-гейтами",
-                "description": "Проверить прохождение unit/integration/smoke",
-                "deadline": None,
-            }
-        )
-    if not items:
-        topic = topics[0] if topics else "урока"
-        items.append(
-            {
-                "task": "Подготовить мини-резюме урока",
-                "description": f"Описать как применить тему '{topic}' на практике",
-                "deadline": None,
-            }
-        )
-    return items
-
-
-def _build_lesson_analysis(text: str, fast: dict[str, int], deduped: list[str]) -> dict[str, Any]:
-    sentences = _sentences(text)
-    topics = _extract_topics(text)
-    questions = _build_questions(text, topics)
-    practical_activities = _build_practical_activities(text)
-    balance = _build_theory_practice_balance(text)
-    interactivity = _build_interactivity(text)
-    structure = _build_lesson_structure(text)
-    homework = _build_homework(text, topics)
-    suggestions = _build_improvement_suggestions(balance, interactivity, interactivity["breakouts_or_pair_work"])
-
-    summary = sentences[0] if sentences else text[:240]
-    detailed_summary = ". ".join(sentences[:3]) if sentences else text[:500]
-
-    return {
-        "summary": summary,
-        "detailed_summary": detailed_summary or None,
-        "questions_asked": questions,
-        "concepts_explained": topics,
-        "practical_activities": practical_activities,
-        "theory_practice_balance": balance,
-        "interactivity": interactivity,
-        "learning_outcomes_stated": len(topics) >= 2 and fast["words"] >= 10,
-        "lesson_structure": structure,
-        "improvement_suggestions": suggestions,
-        "homework": homework,
-        "preparation_for_next": [
-            "Собрать обратную связь от участников по сложности материала",
-            "Подготовить данные и артефакты для следующего занятия",
-        ],
-        "next_lesson_focus": topics[0] if topics else "Развитие структуры занятия",
-    }
-
-
 def _build_digest_topics(text: str, fast: dict[str, int]) -> dict[str, Any]:
     topics = _extract_topics(text)
     sentences = _sentences(text)
@@ -337,6 +223,141 @@ def _build_mentor_session(text: str, fast: dict[str, int]) -> dict[str, Any]:
         "next_actions": next_actions,
         "metrics": {"word_count": fast["words"], "chunk_count": fast["chunks"]},
     }
+
+
+def _claude_command() -> list[str]:
+    raw = os.environ.get("BACKBONE_CLAUDE_CMD", "claude")
+    cmd = shlex.split(raw.strip()) if raw.strip() else []
+    if not cmd:
+        raise PipelineError("BACKBONE_CLAUDE_CMD is empty")
+    return cmd
+
+
+def _build_lesson_prompt(transcript: str) -> str:
+    return f"""
+Ты анализируешь транскрипт урока и должен вернуть ТОЛЬКО JSON по заданной схеме.
+Важные правила:
+1) Никакого markdown, только валидный JSON-объект.
+2) Заполняй все обязательные поля.
+3) Не добавляй дополнительные поля.
+4) Если данных мало, используй null или короткие списки, но сохрани типы.
+5) Для theory_practice_balance: проценты от 0 до 100, сумма ровно 100.
+6) Язык ответа: русский (допускаются технические англ. термины из исходного текста).
+7) practical_activities и homework должны быть конкретными и привязанными к содержанию транскрипта.
+
+ТРАНСКРИПТ УРОКА:
+{transcript}
+""".strip()
+
+
+def _pick_model_name(claude_output: dict[str, Any], configured_model: str) -> str:
+    usage = claude_output.get("modelUsage")
+    if not isinstance(usage, dict) or not usage:
+        return configured_model
+
+    best_name = configured_model
+    best_cost = -1.0
+    for name, data in usage.items():
+        if not isinstance(data, dict):
+            continue
+        cost = data.get("costUSD")
+        if isinstance(cost, (int, float)) and float(cost) > best_cost:
+            best_name = str(name)
+            best_cost = float(cost)
+    return best_name
+
+
+def _extract_structured_output(claude_output: dict[str, Any]) -> dict[str, Any]:
+    if claude_output.get("is_error") is True:
+        raise PipelineError("Claude returned is_error=true")
+
+    structured = claude_output.get("structured_output")
+    if isinstance(structured, dict):
+        return structured
+
+    result_text = claude_output.get("result")
+    if isinstance(result_text, str) and result_text.strip():
+        try:
+            parsed = json.loads(result_text)
+        except json.JSONDecodeError as e:
+            raise PipelineError(f"Claude result is not valid JSON: {e}") from e
+        if isinstance(parsed, dict):
+            return parsed
+
+    raise PipelineError("Claude output has no structured JSON payload")
+
+
+def _generate_lesson_analysis_via_claude(transcript: str) -> tuple[dict[str, Any], dict[str, str]]:
+    cmd = _claude_command()
+    model = os.environ.get("BACKBONE_CLAUDE_MODEL", "opus")
+    effort = os.environ.get("BACKBONE_CLAUDE_EFFORT", "medium")
+    timeout_sec = int(os.environ.get("BACKBONE_CLAUDE_TIMEOUT_SEC", "180"))
+    retries = int(os.environ.get("BACKBONE_CLAUDE_RETRIES", "2"))
+
+    prompt = _build_lesson_prompt(transcript)
+    schema_json = json.dumps(CLAUDE_SCHEMA, ensure_ascii=False)
+
+    last_error = "unknown"
+    for attempt in range(1, retries + 2):
+        try:
+            proc = subprocess.run(
+                [
+                    *cmd,
+                    "-p",
+                    "--output-format",
+                    "json",
+                    "--json-schema",
+                    schema_json,
+                    "--model",
+                    model,
+                    "--effort",
+                    effort,
+                    "--tools",
+                    "",
+                    "--no-session-persistence",
+                    prompt,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=timeout_sec,
+            )
+        except FileNotFoundError as e:
+            raise PipelineError(f"Claude command not found: {cmd[0]}") from e
+        except subprocess.TimeoutExpired as e:
+            last_error = f"timeout after {timeout_sec}s"
+            if attempt > retries:
+                raise PipelineError(f"Claude call failed: {last_error}") from e
+            continue
+
+        if proc.returncode != 0:
+            tail = (proc.stderr or proc.stdout or "").strip()[-1500:]
+            last_error = f"exit={proc.returncode}; {tail}"
+            if attempt > retries:
+                raise PipelineError(f"Claude call failed: {last_error}")
+            continue
+
+        out = proc.stdout.strip()
+        if not out:
+            last_error = "empty stdout"
+            if attempt > retries:
+                raise PipelineError(f"Claude call failed: {last_error}")
+            continue
+
+        try:
+            claude_output = json.loads(out)
+        except json.JSONDecodeError as e:
+            last_error = f"invalid json stdout: {e}"
+            if attempt > retries:
+                raise PipelineError(f"Claude call failed: {last_error}") from e
+            continue
+
+        structured = _extract_structured_output(claude_output)
+        return structured, {
+            "analysis_provider": "claude_code",
+            "analysis_model": _pick_model_name(claude_output, model),
+        }
+
+    raise PipelineError(f"Claude call failed: {last_error}")
 
 
 def _expect_type(name: str, value: Any, expected: type | tuple[type, ...]) -> None:
@@ -449,11 +470,11 @@ def _schema_validate(profile: str, result: dict[str, Any]) -> None:
 
 
 def _generate(profile: str, normalized: str, fast: dict[str, int], deduped: list[str]) -> dict[str, Any]:
-    if profile == "lesson_analysis":
-        return _build_lesson_analysis(normalized, fast, deduped)
     if profile == "digest_topics":
         return _build_digest_topics(normalized, fast)
-    return _build_mentor_session(normalized, fast)
+    if profile == "mentor_session":
+        return _build_mentor_session(normalized, fast)
+    raise PipelineError(f"Unsupported generation profile '{profile}'")
 
 
 def run(profile: str, source: str) -> RunResult:
@@ -486,8 +507,16 @@ def run(profile: str, source: str) -> RunResult:
     deduped = _semantic_dedupe(chunks)
     timings_ms["semantic_dedupe"] = int((time.perf_counter() - t0) * 1000)
 
+    analysis_meta: dict[str, str] = {}
     t0 = time.perf_counter()
-    generated = _generate(profile, normalized, fast, deduped)
+    if profile == "lesson_analysis":
+        generated, analysis_meta = _generate_lesson_analysis_via_claude(normalized)
+    else:
+        generated = _generate(profile, normalized, fast, deduped)
+        analysis_meta = {
+            "analysis_provider": "deterministic",
+            "analysis_model": "n/a",
+        }
     timings_ms["generate"] = int((time.perf_counter() - t0) * 1000)
 
     t0 = time.perf_counter()
@@ -512,6 +541,7 @@ def run(profile: str, source: str) -> RunResult:
         "profile": profile,
         "status": "success",
         "created_at": _now_iso(),
+        **analysis_meta,
         "quality": quality,
         "timings_ms": timings_ms,
         "result": generated,
@@ -531,6 +561,7 @@ def run(profile: str, source: str) -> RunResult:
         "artifact_id": artifact_id,
         "profile": profile,
         "source": str(src),
+        **analysis_meta,
         "quality": quality,
     }
     with events_path.open("a", encoding="utf-8") as f:
