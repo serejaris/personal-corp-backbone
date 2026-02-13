@@ -26,16 +26,16 @@ pip install -e '.[dev]'
 
 ## Mandatory commands
 
-- Analyze transcript:
-  - `backbone run --profile lesson_analysis --source /ABS/PATH/transcript.txt`
-- Validate code changes:
-  - `pytest -m unit`
-  - `pytest -m integration`
-  - `pytest -m smoke`
-- Task lifecycle (when task files are touched):
-  - `backbone task start <TASK_ID>`
-  - `backbone task verify <TASK_ID>`
-  - `backbone task done <TASK_ID>`
+1. Analyze transcript:
+   - `backbone run --profile lesson_analysis --source /ABS/PATH/transcript.txt`
+2. Validate code changes:
+   - `pytest -m unit`
+   - `pytest -m integration`
+   - `pytest -m smoke`
+3. Task lifecycle (when task files are touched):
+   - `backbone task start <TASK_ID>`
+   - `backbone task verify <TASK_ID>`
+   - `backbone task done <TASK_ID>`
 
 ## ai-whisper integration
 
@@ -60,7 +60,3 @@ After analysis, include:
 4. `result.improvement_suggestions`
 5. `result.homework`
 6. `quality.word_count` and `quality.chunk_count`
-
-## Detailed runbook
-
-- `docs/agent-runbook.md`
