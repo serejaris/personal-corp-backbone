@@ -13,3 +13,6 @@ Format (machine-readable):
 - [x] T008 | status=done | title=Add fixture-driven integration tests | required_tests=integration | evidence=reports/T008.md | dod=Fixtures cover happy path and failure paths
 - [x] T009 | status=done | title=Wire CI for full automated tests | required_tests=unit,integration | evidence=reports/T009.md | dod=GitHub Actions runs all required tests on PR/push
 - [x] T010 | status=done | title=Prepare v0.1 changelog and decisions | required_tests=unit | evidence=reports/T010.md | dod=Changelog and ADR entries reflect delivered behavior
+- [x] T011 | status=done | title=Harden lesson_analysis to cohorts contract | required_tests=unit,integration | evidence=reports/T011.md | dod=Lesson profile output matches cohorts LessonParsed shape with strict schema checks
+- [x] T012 | status=done | title=Add regression snapshot for lesson_analysis | required_tests=integration | evidence=reports/T012.md | dod=Fixture snapshot detects contract regression for lesson output
+- [x] T013 | status=done | title=Expose quality and stage timings in artifacts | required_tests=unit,smoke | evidence=reports/T013.md | dod=Run payload includes quality metrics and per-stage timing fields

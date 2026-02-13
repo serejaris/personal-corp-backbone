@@ -11,3 +11,7 @@
 ## ADR-003: First integration path
 - Decision: Prioritize `lesson_analysis` path (`ai-whisper -> cohorts`) before mentor
 - Why: Reflects current real usage frequency and business value
+
+## ADR-004: Contract strictness for lesson output
+- Decision: Validate `lesson_analysis` output against strict key/type contract compatible with cohorts `LessonParsed`
+- Why: Prevent drift between local backbone artifacts and downstream cohorts consumer schema

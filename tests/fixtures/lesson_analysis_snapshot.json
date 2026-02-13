@@ -1,0 +1,84 @@
+{
+  "quality": {
+    "source_chars": 271,
+    "word_count": 37,
+    "chunk_count": 1,
+    "deduped_chunks": 1,
+    "dedupe_ratio": 1.0
+  },
+  "result": {
+    "summary": "Сегодня на уроке мы разобрали архитектуру микросервисов, обсудили event-driven подход",
+    "detailed_summary": "Сегодня на уроке мы разобрали архитектуру микросервисов, обсудили event-driven подход. сделали практику по разбиению транскрипта на чанки и выделили ключевые темы для дайджеста. Потом обсудили, как фиксировать задачи в GitHub Issues и как строить пайплайн с тест-гейтами",
+    "questions_asked": [
+      "Как применить микросервисная архитектура в текущем проекте?",
+      "Какие риски при внедрении event-driven подход?"
+    ],
+    "concepts_explained": [
+      "Микросервисная архитектура",
+      "Event-driven подход",
+      "Анализ транскриптов",
+      "Чанкирование контента",
+      "Генерация дайджестов",
+      "Управление задачами через GitHub Issues",
+      "Пайплайн обработки",
+      "Тест-гейты качества"
+    ],
+    "practical_activities": [
+      {
+        "activity": "Практика по разбиению транскрипта на чанки",
+        "duration_estimate": "20m",
+        "participation": "все"
+      },
+      {
+        "activity": "Выделение ключевых тем для дайджеста",
+        "duration_estimate": "15m",
+        "participation": "все"
+      },
+      {
+        "activity": "Фиксация задач в GitHub Issues",
+        "duration_estimate": "10m",
+        "participation": "часть"
+      }
+    ],
+    "theory_practice_balance": {
+      "theory_percent": 56,
+      "practice_percent": 44,
+      "assessment": "хорошо"
+    },
+    "interactivity": {
+      "questions_to_students": 2,
+      "polls_or_checks": [
+        "Проверка понимания по ключевым темам",
+        "Мини-чек по тест-гейтам"
+      ],
+      "breakouts_or_pair_work": false
+    },
+    "learning_outcomes_stated": true,
+    "lesson_structure": {
+      "has_opening": true,
+      "has_closing": true,
+      "transitions_clear": true
+    },
+    "improvement_suggestions": [
+      "Добавить больше практики в середину занятия",
+      "Вставить работу в парах на 10 минут для закрепления"
+    ],
+    "homework": [
+      {
+        "task": "Описать задачи в GitHub Issues",
+        "description": "Сформулировать 3 issues для следующего шага пайплайна",
+        "deadline": null
+      },
+      {
+        "task": "Собрать минимальный пайплайн с тест-гейтами",
+        "description": "Проверить прохождение unit/integration/smoke",
+        "deadline": null
+      }
+    ],
+    "preparation_for_next": [
+      "Собрать обратную связь от участников по сложности материала",
+      "Подготовить данные и артефакты для следующего занятия"
+    ],
+    "next_lesson_focus": "Микросервисная архитектура"
+  }
+}
